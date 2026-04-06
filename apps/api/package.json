@@ -1,0 +1,29 @@
+{
+  "name": "@jobradar/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@jobradar/ats-adapters": "*",
+    "@jobradar/db": "*",
+    "@jobradar/shared": "*",
+    "@prisma/client": "^6.4.0",
+    "@fastify/cors": "^10.0.0",
+    "dotenv": "^16.4.0",
+    "fastify": "^5.2.0",
+    "ioredis": "^5.4.0",
+    "next-auth": "^4.24.13",
+    "stripe": "^17.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

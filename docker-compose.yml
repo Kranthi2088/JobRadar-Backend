@@ -1,0 +1,38 @@
+# Optional local Postgres + Redis — not required for `npm run dev` (Next.js only).
+# When needed: `docker compose up -d` then `npm run db:push` / `npm run db:seed`.
+# Full stack (web + worker): `npm run dev:all` with DATABASE_URL + REDIS_URL set.
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: jobradar
+      POSTGRES_PASSWORD: jobradar
+      POSTGRES_DB: jobradar
+    volumes:
+      - jobradar_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jobradar -d jobradar"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - jobradar_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+      start_period: 3s
+
+volumes:
+  jobradar_pg:
+  jobradar_redis:

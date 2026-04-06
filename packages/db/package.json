@@ -1,0 +1,27 @@
+{
+  "name": "@jobradar/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "db:generate": "dotenv -e ../../docker/compose.override.env -e ../../.env -- prisma generate",
+    "db:push": "dotenv -e ../../docker/compose.override.env -e ../../.env -- prisma db push",
+    "db:migrate": "dotenv -e ../../docker/compose.override.env -e ../../.env -- prisma migrate dev",
+    "db:studio": "dotenv -e ../../docker/compose.override.env -e ../../.env -- prisma studio",
+    "db:seed": "dotenv -e ../../docker/compose.override.env -e ../../.env -- tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@jobradar/ats-adapters": "*",
+    "@prisma/client": "^6.4.0"
+  },
+  "devDependencies": {
+    "prisma": "^6.4.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  }
+}

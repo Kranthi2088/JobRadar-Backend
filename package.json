@@ -1,0 +1,34 @@
+{
+  "name": "jobradar-backend",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo dev --filter=@jobradar/worker --filter=@jobradar/api",
+    "dev:all": "turbo dev",
+    "dev:api": "turbo dev --filter=@jobradar/api",
+    "dev:worker": "turbo dev --filter=@jobradar/worker",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "test": "turbo test",
+    "db:generate": "dotenv -e docker/compose.override.env -e .env -- npx prisma generate --schema=packages/db/prisma/schema.prisma",
+    "db:push": "dotenv -e docker/compose.override.env -e .env -- npx prisma db push --schema=packages/db/prisma/schema.prisma",
+    "db:migrate": "dotenv -e docker/compose.override.env -e .env -- npx prisma migrate dev --schema=packages/db/prisma/schema.prisma",
+    "db:seed": "dotenv -e docker/compose.override.env -e .env -- npx tsx packages/db/prisma/seed.ts",
+    "db:backfill-listing-keys": "dotenv -e docker/compose.override.env -e .env -- npx tsx packages/db/prisma/backfill-listing-keys.ts",
+    "db:studio": "dotenv -e docker/compose.override.env -e .env -- npx prisma studio --schema=packages/db/prisma/schema.prisma",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down"
+  },
+  "devDependencies": {
+    "dotenv-cli": "^8.0.0",
+    "turbo": "^2.4.0",
+    "typescript": "^5.7.0"
+  },
+  "packageManager": "npm@10.9.0",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
