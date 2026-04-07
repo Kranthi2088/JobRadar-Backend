@@ -1,10 +1,18 @@
 /**
- * Vercel Fastify entrypoint (repo root). See https://vercel.com/docs/frameworks/backend/fastify
- * Railway / local dev use `apps/api` → `npm run start --workspace=@jobradar/api` instead.
+ * Vercel serverless entrypoint.
+ * Build Fastify once per lambda instance and forward each request.
  */
+import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { buildApp } from "./apps/api/src/app.js";
 
-const app = await buildApp();
-const port = Number(process.env.PORT) || 3000;
-await app.listen({ port, host: "0.0.0.0" });
-app.log.info(`Backend API listening on ${port}`);
+const appPromise = buildApp();
+let isReady = false;
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const app = await appPromise;
+  if (!isReady) {
+    await app.ready();
+    isReady = true;
+  }
+  app.server.emit("request", req, res);
+}
