@@ -40,8 +40,8 @@ export function jobMatchesWatchlist(
   if (kw && !job.title.toLowerCase().includes(kw.toLowerCase())) return false;
   const locFilter = wl.locationFilter?.trim();
   if (locFilter) {
-    const loc = (job.location ?? "").toLowerCase();
-    if (!loc.includes(locFilter.toLowerCase())) return false;
+    const hay = `${job.location ?? ""} ${job.title}`.toLowerCase();
+    if (!hay.includes(locFilter.toLowerCase())) return false;
   }
   const senFilter = wl.seniorityFilter?.trim();
   if (senFilter) {

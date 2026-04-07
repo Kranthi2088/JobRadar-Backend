@@ -17,6 +17,34 @@ const SELECTORS = [
   "[data-job-id]",
   ".posting-title a",
 ];
+const NOISE_TITLE_PATTERNS: RegExp[] = [
+  /^jobs?$/i,
+  /^job search$/i,
+  /^search jobs$/i,
+  /^careers?$/i,
+  /^career opportunities$/i,
+  /^learn more$/i,
+  /^apply now$/i,
+  /^view all jobs$/i,
+  /^see all jobs$/i,
+  /^english$/i,
+  /^espanol$/i,
+  /^francais$/i,
+  /^deutsch$/i,
+  /^portugues$/i,
+  /^china$/i,
+  /^japan$/i,
+  /^korea$/i,
+  /^india$/i,
+  /^united states$/i,
+];
+
+function isLikelyNoiseTitle(title: string): boolean {
+  const normalized = title.replace(/\s+/g, " ").trim();
+  if (!normalized) return true;
+  if (normalized.length < 4) return true;
+  return NOISE_TITLE_PATTERNS.some((pattern) => pattern.test(normalized));
+}
 
 function hashUrl(url: string): string {
   let hash = 0;
@@ -65,7 +93,7 @@ export function extractJobsFromHtml(
         title = afterId.replace(/-/g, " ").trim() || slug;
       }
 
-      if (!title || title.length < 3) return;
+      if (!title || title.length < 3 || isLikelyNoiseTitle(title)) return;
       seen.add(href);
 
       const url = href.startsWith("http")
@@ -90,11 +118,14 @@ export function extractJobsFromHtml(
 
   return jobs.filter((j) => {
     const u = j.url;
+    const t = j.title;
     if (/accounts\.google\.com/i.test(u)) return false;
     if (/\/jobs\/(recommendations|saved|alerts)\b/i.test(u)) return false;
     if (/\/about\/careers\/applications\//i.test(u) && !/\/jobs\/results\/\d+-/.test(u)) {
       return false;
     }
+    if (/\/(benefits|culture|blog|events|students|internships?)\b/i.test(u)) return false;
+    if (isLikelyNoiseTitle(t)) return false;
     return true;
   });
 }

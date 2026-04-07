@@ -2,7 +2,12 @@ import { Worker } from "bullmq";
 import webpush from "web-push";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
-import { QUEUE_NAMES, jobMatchesWatchlist } from "@jobradar/shared";
+import {
+  DASHBOARD_VISIBILITY_WINDOW_MS,
+  QUEUE_NAMES,
+  isUnitedStatesJobLocationOrTitle,
+  jobMatchesWatchlist,
+} from "@jobradar/shared";
 import { createRedisConnection } from "./redis";
 
 type WatchlistWithUser = Prisma.WatchlistGetPayload<{
@@ -29,6 +34,18 @@ interface NewJobData {
   };
 }
 
+function isDashboardVisibleJob(job: {
+  postedAt?: string;
+  detectedAt: string;
+  location?: string | null;
+  title: string;
+}) {
+  const ts = Date.parse(job.postedAt ?? job.detectedAt);
+  if (Number.isNaN(ts)) return false;
+  if (ts < Date.now() - DASHBOARD_VISIBILITY_WINDOW_MS) return false;
+  return isUnitedStatesJobLocationOrTitle(job.location, job.title);
+}
+
 if (process.env.VAPID_SUBJECT && process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails(
     process.env.VAPID_SUBJECT,
@@ -42,6 +59,9 @@ export async function startNotifier(logger: Logger) {
     QUEUE_NAMES.NEW_JOBS,
     async (bullJob) => {
       const { companySlug, companyId, job } = bullJob.data;
+      if (!isDashboardVisibleJob(job)) {
+        return;
+      }
 
       const company = await prisma.company.findUnique({
         where: { id: companyId },
@@ -172,6 +192,32 @@ export async function startNotifier(logger: Logger) {
             logger.error({ userId: user.id, err: err.message }, "Email notification failed");
           }
         }
+
+        if (
+          user.preferences?.telegramEnabled &&
+          user.preferences?.telegramChatId
+        ) {
+          try {
+            await sendTelegramNotification(
+              user.preferences.telegramChatId,
+              company?.name || companySlug,
+              job
+            );
+
+            await prisma.notification.create({
+              data: {
+                userId: user.id,
+                jobId: dbJob.id,
+                channel: "telegram",
+              },
+            });
+          } catch (err: any) {
+            logger.error(
+              { userId: user.id, err: err.message },
+              "Telegram notification failed"
+            );
+          }
+        }
       }
     },
     {
@@ -241,4 +287,39 @@ async function sendEmailNotification(
       </div>
     `,
   });
+}
+
+async function sendTelegramNotification(
+  chatId: string,
+  companyName: string,
+  job: NormalizedJob & { detectedAt: string; postedAt?: string }
+) {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  if (!botToken) return;
+
+  const message =
+    `🚀 *New role detected*\n\n` +
+    `*${job.title}*\n` +
+    `${companyName}\n` +
+    `${job.location ? `📍 ${job.location}\n` : ""}` +
+    `${job.team ? `👥 ${job.team}\n` : ""}` +
+    `🕒 ${new Date(job.detectedAt).toLocaleString()}\n\n` +
+    `[Apply now](${job.url})`;
+
+  const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text: message,
+      parse_mode: "Markdown",
+      disable_web_page_preview: true,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Telegram API ${res.status}: ${body}`);
+  }
 }

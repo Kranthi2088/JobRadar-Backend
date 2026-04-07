@@ -7,6 +7,12 @@ import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 import { PrismaClient } from "@prisma/client";
 import Redis from "ioredis";
+import {
+  DASHBOARD_VISIBILITY_WINDOW_MS,
+  isUnitedStatesJobLocationOrTitle,
+  roleKeywordTokens,
+  titleMatchesRoleKeyword,
+} from "@jobradar/shared";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "../../..");
@@ -29,7 +35,6 @@ const PLAN_LIMITS: Record<PlanType, { maxCompanies: number }> = {
   pro: { maxCompanies: Number.POSITIVE_INFINITY },
   teams: { maxCompanies: Number.POSITIVE_INFINITY },
 };
-
 function jobMatchesAnyWatchlist(
   job: { companyId: string; title: string; location: string | null; seniority: string | null },
   watchlists: Array<{
@@ -41,10 +46,12 @@ function jobMatchesAnyWatchlist(
 ) {
   return watchlists.some((wl) => {
     if (job.companyId !== wl.companyId) return false;
-    const kw = wl.roleKeyword?.trim();
-    if (kw && !job.title.toLowerCase().includes(kw.toLowerCase())) return false;
+    if (!titleMatchesRoleKeyword(job.title, wl.roleKeyword)) return false;
     const loc = wl.locationFilter?.trim();
-    if (loc && !(job.location || "").toLowerCase().includes(loc.toLowerCase())) return false;
+    if (loc) {
+      const hay = `${job.location || ""} ${job.title || ""}`.toLowerCase();
+      if (!hay.includes(loc.toLowerCase())) return false;
+    }
     const sen = wl.seniorityFilter?.trim();
     if (sen) {
       const s = (job.seniority || "").toLowerCase();
@@ -85,9 +92,20 @@ async function clearWorkerJobCache(): Promise<{ deleted: number }> {
   return { deleted };
 }
 
-function recentJobVisibilityWhere() {
-  const after = new Date(Date.now() - 24 * 60 * 60 * 1000);
+function recentJobVisibilityWhere(windowMs: number = 24 * 60 * 60 * 1000) {
+  const after = new Date(Date.now() - windowMs);
   return { OR: [{ postedAt: { gte: after } }, { detectedAt: { gte: after } }] };
+}
+
+function isDashboardVisibleJob(job: {
+  postedAt: Date | null;
+  detectedAt: Date;
+  location: string | null;
+  title: string;
+}) {
+  const ts = (job.postedAt ?? job.detectedAt).getTime();
+  if (ts < Date.now() - DASHBOARD_VISIBILITY_WINDOW_MS) return false;
+  return isUnitedStatesJobLocationOrTitle(job.location, job.title);
 }
 
 function buildJobWhereFromWatchlists(
@@ -96,7 +114,8 @@ function buildJobWhereFromWatchlists(
     roleKeyword: string;
     locationFilter: string | null;
     seniorityFilter: string | null;
-  }>
+  }>,
+  windowMs?: number
 ) {
   if (watchlists.length === 0) return { id: { in: [] as string[] } };
   return {
@@ -104,10 +123,18 @@ function buildJobWhereFromWatchlists(
       {
         OR: watchlists.map((wl) => {
           const parts: any[] = [{ companyId: wl.companyId }];
-          const kw = wl.roleKeyword?.trim();
-          if (kw) parts.push({ title: { contains: kw, mode: "insensitive" as const } });
+          for (const t of roleKeywordTokens(wl.roleKeyword)) {
+            parts.push({ title: { contains: t, mode: "insensitive" as const } });
+          }
           const loc = wl.locationFilter?.trim();
-          if (loc) parts.push({ location: { contains: loc, mode: "insensitive" as const } });
+          if (loc) {
+            parts.push({
+              OR: [
+                { location: { contains: loc, mode: "insensitive" as const } },
+                { title: { contains: loc, mode: "insensitive" as const } },
+              ],
+            });
+          }
           const sen = wl.seniorityFilter?.trim();
           if (sen) {
             parts.push({
@@ -120,7 +147,7 @@ function buildJobWhereFromWatchlists(
           return { AND: parts };
         }),
       },
-      recentJobVisibilityWhere(),
+      recentJobVisibilityWhere(windowMs),
     ],
   };
 }
@@ -267,6 +294,11 @@ app.get("/api/jobs", async (req, reply) => {
   const limit = Math.min(parseInt(query?.limit || "50", 10), 100);
   const company = query?.company || null;
   const keyword = query?.keyword || null;
+  const timelineHours = Math.min(
+    Math.max(parseInt(query?.timeline || "24", 10) || 24, 1),
+    168
+  );
+  const timelineMs = timelineHours * 60 * 60 * 1000;
   const watchlists = await prisma.watchlist.findMany({
     where: { userId: user.id },
     select: { companyId: true, roleKeyword: true, locationFilter: true, seniorityFilter: true },
@@ -274,7 +306,7 @@ app.get("/api/jobs", async (req, reply) => {
   const allowedCompanyIds = new Set(
     watchlists.map((w: { companyId: string }) => w.companyId)
   );
-  const baseWhere = buildJobWhereFromWatchlists(watchlists);
+  const baseWhere = buildJobWhereFromWatchlists(watchlists, timelineMs);
   if (company && !allowedCompanyIds.has(company)) {
     return { jobs: [], pagination: { page, limit, total: 0, totalPages: 0 } };
   }
@@ -339,20 +371,44 @@ app.get("/api/jobs/stream", async (req, reply) => {
   });
   const companyIds = watchlists.map((w: { companyId: string }) => w.companyId);
   let lastCheck = new Date();
+  const sentJobIds = new Set<string>();
+  const pruneSentCache = () => {
+    if (sentJobIds.size > 2000) {
+      sentJobIds.clear();
+    }
+  };
+
+  // Keep SSE connection warm across proxies/load balancers.
+  const heartbeat = setInterval(() => {
+    send("heartbeat", { ts: new Date().toISOString() });
+  }, 20_000);
+
   const interval = setInterval(async () => {
     try {
+      // Small overlap to avoid misses between db read and cursor update.
+      const overlapMs = 1500;
+      const since = new Date(lastCheck.getTime() - overlapMs);
       const newJobs = await prisma.job.findMany({
-        where: { AND: [{ companyId: { in: companyIds } }, { detectedAt: { gt: lastCheck } }, recentJobVisibilityWhere()] },
+        where: { AND: [{ companyId: { in: companyIds } }, { detectedAt: { gt: since } }, recentJobVisibilityWhere()] },
         include: { company: { select: { name: true, slug: true, logoUrl: true } } },
-        orderBy: { detectedAt: "desc" },
+        orderBy: { detectedAt: "asc" },
       });
       const matchedJobs = newJobs.filter((job: any) =>
         jobMatchesAnyWatchlist(
           { companyId: job.companyId, title: job.title, location: job.location, seniority: job.seniority },
           watchlists
         )
+      ).filter((job: any) =>
+        isDashboardVisibleJob({
+          postedAt: job.postedAt ?? null,
+          detectedAt: job.detectedAt,
+          location: job.location ?? null,
+          title: job.title,
+        })
       );
+      let maxDetectedAt = lastCheck;
       for (const job of matchedJobs) {
+        if (sentJobIds.has(job.id)) continue;
         send("new-job", {
           id: job.id,
           externalId: job.externalId,
@@ -365,12 +421,23 @@ app.get("/api/jobs/stream", async (req, reply) => {
           detectedAt: job.detectedAt.toISOString(),
           company: job.company,
         });
+        sentJobIds.add(job.id);
+        if (job.detectedAt > maxDetectedAt) {
+          maxDetectedAt = job.detectedAt;
+        }
       }
-      lastCheck = new Date();
+      // Advance cursor even if no matched jobs to prevent replay loops.
+      if (newJobs.length > 0) {
+        const newest = newJobs[newJobs.length - 1].detectedAt;
+        if (newest > maxDetectedAt) maxDetectedAt = newest;
+      }
+      lastCheck = maxDetectedAt;
+      pruneSentCache();
     } catch {}
-  }, 5000);
+  }, 1000);
   req.raw.on("close", () => {
     clearInterval(interval);
+    clearInterval(heartbeat);
     reply.raw.end();
   });
   return reply;
@@ -380,6 +447,11 @@ app.put("/api/settings", async (req, reply) => {
   const user = await requireUser(req);
   if (!user) return reply.code(401).send({ error: "Unauthorized" });
   const body = (req.body || {}) as any;
+  const telegramChatId =
+    typeof body.telegramChatId === "string" && body.telegramChatId.trim()
+      ? body.telegramChatId.trim()
+      : null;
+  const telegramEnabled = Boolean(body.telegramEnabled && telegramChatId);
   const preferences = await prisma.userPreferences.upsert({
     where: { userId: user.id },
     create: {
@@ -388,12 +460,16 @@ app.put("/api/settings", async (req, reply) => {
       quietHoursStart: body.quietHoursStart,
       quietHoursEnd: body.quietHoursEnd,
       timezone: body.timezone || "UTC",
+      telegramEnabled,
+      telegramChatId,
     },
     update: {
       emailMode: body.emailMode,
       quietHoursStart: body.quietHoursStart,
       quietHoursEnd: body.quietHoursEnd,
       timezone: body.timezone,
+      telegramEnabled,
+      telegramChatId,
     },
   });
   return preferences;

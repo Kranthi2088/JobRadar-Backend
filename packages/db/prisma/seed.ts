@@ -71,6 +71,49 @@ const companies: Array<{
       },
     ],
   },
+  {
+    slug: "doordash",
+    name: "DoorDash",
+    logoHost: "doordash.com",
+    sources: greenhouseThenCareersSite(
+      "https://api.greenhouse.io/v1/boards/doordash/jobs",
+      "https://careers.doordash.com"
+    ),
+  },
+  {
+    slug: "apple",
+    name: "Apple",
+    logoHost: "apple.com",
+    sources: [
+      {
+        priority: 0,
+        atsType: "custom",
+        endpoint: "https://jobs.apple.com/en-us/search",
+      },
+      {
+        priority: 1,
+        atsType: "playwright",
+        endpoint: "https://jobs.apple.com/en-us/search",
+      },
+    ],
+  },
+  {
+    slug: "uber",
+    name: "Uber",
+    logoHost: "uber.com",
+    sources: [
+      {
+        priority: 0,
+        atsType: "custom",
+        endpoint: "https://www.uber.com/us/en/careers/list/",
+      },
+      {
+        priority: 1,
+        atsType: "playwright",
+        endpoint: "https://www.uber.com/us/en/careers/list/",
+      },
+    ],
+  },
 ];
 
 async function main() {

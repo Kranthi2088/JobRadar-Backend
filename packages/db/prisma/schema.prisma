@@ -17,6 +17,7 @@ enum NotificationChannel {
   web_push
   mobile_push
   email
+  telegram
 }
 
 enum EmailMode {
@@ -44,6 +45,8 @@ model User {
   email         String    @unique
   name          String?
   image         String?
+  /// bcrypt hash for email/password accounts; null for OAuth-only users
+  passwordHash  String?
   plan          Plan      @default(free)
   emailVerified DateTime?
   createdAt     DateTime  @default(now())
@@ -236,6 +239,8 @@ model UserPreferences {
   quietHoursEnd   String?   // HH:mm format
   emailMode       EmailMode @default(instant)
   timezone        String    @default("UTC")
+  telegramEnabled Boolean   @default(false)
+  telegramChatId  String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
