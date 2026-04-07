@@ -101,24 +101,67 @@ async function runSchedulerTick(logger: FastifyBaseLogger) {
     }
   } catch (err: any) {
     const msg = err?.message ?? String(err);
+    const code: string | undefined = err?.code;
     const isDb =
       msg.includes("Can't reach database") ||
       msg.includes("connection pool") ||
       msg.includes("Timed out fetching") ||
-      err?.code === "P1001" ||
-      err?.code === "P2024";
+      msg.includes("ECONNREFUSED") ||
+      msg.includes("ENOTFOUND") ||
+      msg.includes("ETIMEDOUT") ||
+      msg.includes("SSL") ||
+      msg.includes("certificate") ||
+      code === "P1001" ||
+      code === "P1002" ||
+      code === "P1008" ||
+      code === "P1017" ||
+      code === "P2024";
+
     if (isDb) {
       const now = Date.now();
       if (now - lastSchedulerDbErrorLog > 60_000) {
-        logger.warn(
-          { err: msg },
-          "Database unreachable — poller idle. Run Postgres (npm run docker:up) and check DATABASE_URL."
-        );
         lastSchedulerDbErrorLog = now;
+
+        // Mask credentials in the DATABASE_URL for safe logging
+        const rawUrl = process.env.DATABASE_URL ?? "(not set)";
+        const maskedUrl = rawUrl.replace(
+          /\/\/([^:]+):([^@]+)@/,
+          "//$1:***@"
+        );
+
+        // Classify the failure for faster diagnosis
+        let hint = "Unknown DB connectivity issue";
+        if (code === "P1001" || msg.includes("Can't reach database") || msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND")) {
+          hint = "Host unreachable — check DATABASE_URL hostname/port and network/firewall rules";
+        } else if (code === "P1002" || msg.includes("ETIMEDOUT") || msg.includes("Timed out fetching")) {
+          hint = "Connection timed out — host is reachable but not responding; check firewall, VPC, or Supabase connection limits";
+        } else if (code === "P1008") {
+          hint = "Operations timed out — database is overloaded or connection pool exhausted";
+        } else if (code === "P1017") {
+          hint = "Server closed the connection — check Supabase connection limits or pgBouncer settings";
+        } else if (code === "P2024") {
+          hint = "Connection pool timeout — all connections in use; consider reducing pool size or increasing timeout";
+        } else if (msg.includes("SSL") || msg.includes("certificate")) {
+          hint = "SSL/TLS handshake failed — verify sslmode=require is set and the server certificate is trusted";
+        } else if (msg.includes("authentication") || msg.includes("password")) {
+          hint = "Authentication failed — check DB username/password in DATABASE_URL";
+        }
+
+        logger.warn(
+          {
+            prismaCode: code ?? "(none)",
+            errorMessage: msg,
+            stack: err?.stack ?? "(no stack)",
+            databaseUrl: maskedUrl,
+            hint,
+            ...(err?.meta ? { prismaMeta: err.meta } : {}),
+          },
+          "Database unreachable — poller idle"
+        );
       }
       return;
     }
-    logger.error({ err: msg }, "Scheduler tick failed");
+    logger.error({ err: msg, code, stack: err?.stack }, "Scheduler tick failed");
   }
 }
 
