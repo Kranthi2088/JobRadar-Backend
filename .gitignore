@@ -9,3 +9,5 @@ dist/
 coverage/
 .vercel/
 .railway/
+.vercel
+.env*.local

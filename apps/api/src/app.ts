@@ -190,20 +190,29 @@ async function requireUser(req: any) {
   // Fastify runs on a separate origin, so NextAuth's default "secure cookie"
   // inference (NEXTAUTH_URL / VERCEL) can pick the wrong cookie name here.
   // Try the local http cookie first, then the https secure cookie.
-  const token =
-    (await getToken({
+  const candidateCookieNames = [
+    "next-auth.session-token",
+    "__Secure-next-auth.session-token",
+    "authjs.session-token",
+    "__Secure-authjs.session-token",
+  ];
+  let token = null as Awaited<ReturnType<typeof getToken>> | null;
+  for (const cookieName of candidateCookieNames) {
+    const parsed = await getToken({
       req: jwtReq,
       secret,
-      secureCookie: false,
-      cookieName: "next-auth.session-token",
-    })) ||
-    (await getToken({
-      req: jwtReq,
-      secret,
-      secureCookie: true,
-      cookieName: "__Secure-next-auth.session-token",
-    }));
-  if (!token?.sub) return null;
+      secureCookie: cookieName.startsWith("__Secure-"),
+      cookieName,
+    });
+    if (parsed?.sub) {
+      token = parsed;
+      break;
+    }
+  }
+  if (!token) {
+    token = await getToken({ req: jwtReq, secret });
+  }
+  if (!token?.sub || typeof token.sub !== "string") return null;
   const user = await prisma.user.findUnique({
     where: { id: token.sub },
     select: { id: true, email: true, plan: true },
