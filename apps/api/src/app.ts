@@ -588,3 +588,18 @@ app.post("/api/dev/reset", async (req, reply) => {
 
   return app;
 }
+
+// Vercel fallback entrypoint:
+// Some project configurations resolve this module directly for serverless routes.
+// Exporting a default request handler keeps Fastify deployment-compatible.
+const vercelAppPromise = buildApp();
+let vercelReady = false;
+
+export default async function handler(req: any, res: any) {
+  const app = await vercelAppPromise;
+  if (!vercelReady) {
+    await app.ready();
+    vercelReady = true;
+  }
+  app.server.emit("request", req, res);
+}
