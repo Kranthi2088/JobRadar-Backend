@@ -1,6 +1,6 @@
 import type { NormalizedJob } from "@jobradar/shared";
-import { ATSAdapter } from "../adapter";
-import { captureJobsFromPageApi } from "./page-api-capture";
+import { ATSAdapter } from "../adapter.js";
+import { captureJobsFromPageApi } from "./page-api-capture.js";
 
 type MetaJobNode = {
   id?: string | number;

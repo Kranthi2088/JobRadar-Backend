@@ -1,4 +1,4 @@
-import { RECENT_JOB_POST_WINDOW_MS } from "./constants";
+import { RECENT_JOB_POST_WINDOW_MS } from "./constants.js";
 
 /**
  * Dashboard shows US-only roles. Many ATS rows put country/city in the title and leave

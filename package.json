@@ -11,6 +11,8 @@
     "dev:api": "turbo dev --filter=@jobradar/api",
     "dev:worker": "turbo dev --filter=@jobradar/worker",
     "build": "turbo build",
+    "build:api": "turbo build --filter=@jobradar/api",
+    "build:worker": "turbo build --filter=@jobradar/worker",
     "lint": "turbo lint",
     "test": "turbo test",
     "db:generate": "dotenv -e docker/compose.override.env -e .env -- npx prisma generate --schema=packages/db/prisma/schema.prisma",

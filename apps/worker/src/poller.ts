@@ -8,11 +8,11 @@ import {
   CIRCUIT_BREAKER,
   shouldPersistFetchedJob,
 } from "@jobradar/shared";
-import type { Logger } from "pino";
+import type { FastifyBaseLogger } from "fastify";
 import type { NormalizedJob } from "@jobradar/shared";
-import { redis } from "./redis";
-import { jobQueue } from "./queue";
-import { prisma } from "./prisma";
+import { redis } from "./redis.js";
+import { jobQueue } from "./queue.js";
+import { prisma } from "./prisma.js";
 
 const POLL_LAST_KEY = (slug: string) => `poll:last-at:${slug}`;
 const POLL_FAIL_KEY = (slug: string) => `poll:failures:${slug}`;
@@ -32,7 +32,7 @@ const DEFAULT_INTERVAL_SEC = 300;
 let lastSchedulerDbErrorLog = 0;
 let loggedEmptyWatchlists = false;
 
-export async function startPoller(logger: Logger) {
+export async function startPoller(logger: FastifyBaseLogger) {
   logger.info(
     {
       SCHEDULER_TICK_MS,
@@ -66,7 +66,7 @@ type WatchedCompany = {
   intervalSeconds: number;
 };
 
-async function runSchedulerTick(logger: Logger) {
+async function runSchedulerTick(logger: FastifyBaseLogger) {
   try {
     const watched = await loadWatchedCompanies();
     if (watched.length === 0) {
@@ -160,7 +160,7 @@ async function loadWatchedCompanies(): Promise<WatchedCompany[]> {
       id: c.id,
       slug: c.slug,
       preferredSourceId: c.preferredSourceId,
-      sources: c.sources.map((s) => ({
+      sources: c.sources.map((s: (typeof c.sources)[number]) => ({
         id: s.id,
         atsType: s.atsType,
         endpoint: s.endpoint,
@@ -173,7 +173,7 @@ async function loadWatchedCompanies(): Promise<WatchedCompany[]> {
 
 async function executePoll(
   company: WatchedCompany,
-  logger: Logger
+  logger: FastifyBaseLogger
 ): Promise<void> {
   const circuitOpen = await isCircuitOpen(company.slug);
   if (circuitOpen) {
@@ -322,7 +322,7 @@ async function deduplicateJobs(
 async function upsertAllJobsToDb(
   companyId: string,
   jobs: NormalizedJob[],
-  logger: Logger
+  logger: FastifyBaseLogger
 ) {
   for (const job of jobs) {
     const listingKey = job.listingKey ?? computeListingKey(job.url);
@@ -369,7 +369,7 @@ async function enqueueNotificationsForNewJobs(
   companyId: string,
   companySlug: string,
   newJobs: NormalizedJob[],
-  logger: Logger
+  logger: FastifyBaseLogger
 ) {
   await jobQueue.addBulk(
     newJobs.map((job) => ({

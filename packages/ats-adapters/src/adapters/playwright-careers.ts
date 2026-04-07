@@ -1,6 +1,6 @@
 import type { NormalizedJob } from "@jobradar/shared";
-import { ATSAdapter } from "../adapter";
-import { extractJobsFromHtml } from "../html-extract";
+import { ATSAdapter } from "../adapter.js";
+import { extractJobsFromHtml } from "../html-extract.js";
 
 /**
  * Renders the careers page in headless Chromium (for SPAs / lazy content).

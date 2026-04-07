@@ -1,6 +1,6 @@
 import type { NormalizedJob } from "@jobradar/shared";
-import { ATSAdapter } from "../adapter";
-import { extractJobsFromHtml } from "../html-extract";
+import { ATSAdapter } from "../adapter.js";
+import { extractJobsFromHtml } from "../html-extract.js";
 
 export class GenericHTMLAdapter extends ATSAdapter {
   readonly atsType = "custom";

@@ -1,5 +1,5 @@
 import type { NormalizedJob } from "@jobradar/shared";
-import { ATSAdapter } from "../adapter";
+import { ATSAdapter } from "../adapter.js";
 
 interface AshbyJobPosting {
   id: string;

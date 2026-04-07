@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { LeverAdapter } from "../adapters/lever";
+import { LeverAdapter } from "../adapters/lever.js";
 
 const mockLeverResponse = [
   {

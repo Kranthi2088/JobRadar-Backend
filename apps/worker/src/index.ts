@@ -1,12 +1,12 @@
 import "./env.js";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
-import { startPoller } from "./poller";
-import { startNotifier } from "./notifier";
-import { redis } from "./redis";
-import { prisma } from "./prisma";
+import { startPoller } from "./poller.js";
+import { startNotifier } from "./notifier.js";
+import { redis } from "./redis.js";
+import { prisma } from "./prisma.js";
 
-const PORT = parseInt(process.env.WORKER_PORT || "3001", 10);
+const PORT = parseInt(process.env.PORT || process.env.WORKER_PORT || "3001", 10);
 const startTime = Date.now();
 
 /** Next.js app URL — worker is API-only; browsers should use this port for the UI. */
@@ -53,7 +53,9 @@ app.get("/health", async (_req, reply) => {
 /** If someone opens the worker port in a browser, send them to the Next.js app. */
 app.setNotFoundHandler((req, reply) => {
   if (req.method === "GET" && req.url !== "/health") {
-    return reply.redirect(302, WEB_APP_URL + (req.url === "/" ? "" : ""));
+    // Fastify v5: redirect(url, statusCode?)
+    const path = req.url === "/" ? "" : req.url;
+    return reply.redirect(WEB_APP_URL + path, 302);
   }
   return reply.code(404).send({ error: "Not found", webApp: WEB_APP_URL });
 });

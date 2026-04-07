@@ -1,81 +1,120 @@
-# Backend Deployment Guide (Vercel + GitHub Actions)
+# Backend Deployment Guide (API + Worker + Redis)
 
-## 1) Connect backend repo to Vercel
+This backend is a multi-service system:
 
-1. Push `JobRadar-backend` to GitHub.
-2. In Vercel, click **Add New Project** and import that repo.
-3. In project settings:
-   - Runtime: Node.js (auto)
-   - Root directory: repo root (or your preferred backend root)
-4. Save the project.
+- API (`apps/api`) - HTTP endpoints used by frontend
+- Worker (`apps/worker`) - long-running poller/notifier process
+- Redis - queue/cache/event coordination between services
+- Postgres - application data
 
-## 2) Add required Vercel environment variables
+The worker is not serverless-friendly. Run API and worker as separate always-on services.
 
-Set these in **Vercel Project -> Settings -> Environment Variables**:
+## 1) Hosting options (recommended websites)
+
+### Option A (recommended for fast setup)
+
+- Frontend: [Vercel](https://vercel.com/)
+- API service: [Railway](https://railway.app/) or [Render](https://render.com/)
+- Worker service: same as API host (Railway/Render) as a separate service
+- Redis: [Upstash](https://upstash.com/) or [Redis Cloud](https://redis.io/cloud/)
+- Postgres: [Neon](https://neon.tech/) / [Supabase](https://supabase.com/) / Railway Postgres
+
+### Option B (single platform backend)
+
+- API + Worker + Postgres on Railway or Render
+- Redis from Upstash/Redis Cloud (or platform-managed Redis if available)
+
+### Option C (more control)
+
+- API + Worker on [Fly.io](https://fly.io/) or [DigitalOcean App Platform](https://www.digitalocean.com/products/app-platform)
+- Managed Redis (Upstash/Redis Cloud)
+- Managed Postgres (Neon/Supabase)
+
+## 2) Project connection status
+
+Your repositories are already connected to GitHub remotes:
+
+- Backend: `https://github.com/Kranthi2088/JobRadar-Backend.git`
+- Frontend: `https://github.com/Kranthi2088/JobRadar-Frontend.git`
+
+So you can immediately import these repos into hosting providers.
+
+## 3) Connect backend services to hosting (first deployment wiring)
+
+Create two separate backend services from this same repo (`JobRadar-backend`):
+
+1. **API service**
+   - Root directory: repo root
+   - Build command: `npm ci && npm run build:api`  
+     (runs Turbo so `@jobradar/shared`, `@jobradar/ats-adapters`, `@jobradar/db`, and `@jobradar/api` all compile to `dist/` — **do not** use only `npm run build --workspace=@jobradar/api`, or workspace packages may stay on `.ts` entrypoints and Node will crash at runtime.)
+   - Start command: `npm run start --workspace=@jobradar/api`
+   - Health check path: `/health`
+2. **Worker service**
+   - Root directory: repo root
+   - Build command: `npm ci && npm run build:worker`  
+     (same idea: Turbo builds shared libs + worker.)
+   - Start command: `npm run start --workspace=@jobradar/worker`
+   - Health check path: `/health`
+
+Provision a managed Redis instance, then set `REDIS_URL` in both API and worker.
+
+The API and worker read **`PORT`** first (Railway/Render set this), then `API_PORT` / `WORKER_PORT`, so you usually do not need extra port variables on those hosts.
+
+## 4) Required production environment variables
+
+Set these for API and worker as applicable:
 
 - `NODE_ENV=production`
-- `API_PORT=3002` (or your preferred port)
-- `DATABASE_URL`
-- `REDIS_URL`
+- `DATABASE_URL` (API + worker)
+- `REDIS_URL` (API + worker)
+- `PORT` (set by Railway/Render; API/worker use this first)
+- `API_PORT` / `WORKER_PORT` (optional overrides if you do not use `PORT`)
+- `WEB_APP_URL` (worker redirect target)
 - `NEXTAUTH_SECRET`
-- `NEXTAUTH_URL` (frontend auth URL)
-- `APP_BASE_URL` (public frontend URL, if used)
-- `STRIPE_SECRET_KEY` (if billing endpoints are enabled)
-- `STRIPE_WEBHOOK_SECRET` (if webhook route is enabled)
-- `NEXT_PUBLIC_VAPID_PUBLIC_KEY`
-- `VAPID_PRIVATE_KEY`
-- `VAPID_SUBJECT`
-- `TELEGRAM_BOT_TOKEN`
-- `RESEND_API_KEY` (if email notifications are enabled)
+- `NEXTAUTH_URL` (frontend public URL)
+- `APP_BASE_URL` (if used)
+- `STRIPE_SECRET_KEY` (optional)
+- `STRIPE_WEBHOOK_SECRET` (optional)
+- `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (if web push enabled)
+- `VAPID_PRIVATE_KEY` (if web push enabled)
+- `VAPID_SUBJECT` (if web push enabled)
+- `TELEGRAM_BOT_TOKEN` (optional)
+- `RESEND_API_KEY` (optional)
 
-Also add equivalent values in GitHub **Repository Secrets** for CI/CD where needed.
+Also configure frontend `BACKEND_API_URL` to point to the deployed API service.
 
-## 3) Configure GitHub secrets for deploy workflow
+## 5) GitHub Actions and CI/CD
 
-In GitHub repo settings -> **Secrets and variables -> Actions**, add:
+Existing workflows:
 
-- `VERCEL_TOKEN`
-- `VERCEL_ORG_ID`
-- `VERCEL_PROJECT_ID`
+- **CI** (`.github/workflows/backend-ci.yml`)
+  - install dependencies
+  - lint/typecheck
+  - tests
+  - build
+- **CD** (`.github/workflows/backend-deploy-vercel.yml`)
+  - Vercel deployment workflow
 
-These are used by `.github/workflows/backend-deploy-vercel.yml`.
+Note: Vercel is better suited for frontend/serverless patterns. For this backend design (especially the worker), Railway/Render/Fly are usually a better production fit.
 
-## 4) CI and CD behavior
+## 6) Database migration step
 
-- **CI** (`backend-ci.yml`):
-  - installs dependencies
-  - runs lint/typecheck
-  - runs shared tests + adapter tests
-  - runs build
-- **CD** (`backend-deploy-vercel.yml`):
-  - runs on push to `main` (backend-related paths) and manual dispatch
-  - builds and deploys to Vercel production
-
-## 5) Database migration step
-
-Before first production traffic (or on schema change), run Prisma migrations against production DB:
+Before first production traffic (and for each schema change), run:
 
 ```bash
 npx prisma migrate deploy --schema=packages/db/prisma/schema.prisma
 ```
 
-Run this in a trusted CI step or a one-time release command.
+Run in a trusted CI release job or one-time deploy command.
 
-## 6) Post-deploy smoke tests
+## 7) Post-deploy smoke tests
 
-After deploy:
+After deployment:
 
-1. `GET /health` returns healthy.
-2. Open frontend dashboard and verify initial jobs load.
-3. Verify SSE live updates (`/api/jobs/stream`) work.
-4. Trigger a known new job and verify:
-   - appears in live dashboard
-   - notification sent only when dashboard-visible filters match.
-
-## Important production note
-
-This backend has two parts:
-- API (`apps/api`)
-- worker (`apps/worker`, BullMQ queue consumer)
-
-The worker is a long-running process and should run on a worker-friendly host (VM/container platform). Keep Redis and worker running continuously for real-time job ingestion and notifications.
+1. API `GET /health` returns healthy.
+2. Worker `GET /health` returns healthy and can access Redis + DB.
+3. Frontend loads dashboard using deployed API URL.
+4. SSE endpoint (`/api/jobs/stream`) receives events.
+5. Trigger a known new job and confirm:
+   - dashboard update appears
+   - notification behavior matches watchlist filters.

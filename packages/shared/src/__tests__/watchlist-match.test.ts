@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { jobMatchesAnyWatchlist, jobMatchesWatchlist } from "../types";
+import { jobMatchesAnyWatchlist, jobMatchesWatchlist } from "../types.js";
 
 describe("watchlist matching", () => {
   it("matches by company and keyword", () => {

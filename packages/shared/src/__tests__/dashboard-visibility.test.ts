@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { RECENT_JOB_POST_WINDOW_MS } from "../constants";
+import { RECENT_JOB_POST_WINDOW_MS } from "../constants.js";
 import {
   DASHBOARD_VISIBILITY_WINDOW_MS,
   isUnitedStatesJobLocationOrTitle,
-} from "../dashboard-visibility";
+} from "../dashboard-visibility.js";
 
 describe("dashboard visibility helpers", () => {
   it("keeps dashboard visibility window aligned with recent-job window", () => {

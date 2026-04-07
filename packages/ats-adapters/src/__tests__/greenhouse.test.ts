@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { GreenhouseAdapter } from "../adapters/greenhouse";
+import { GreenhouseAdapter } from "../adapters/greenhouse.js";
 
 const mockGreenhouseResponse = {
   jobs: [

@@ -1,14 +1,14 @@
 import { Worker } from "bullmq";
 import webpush from "web-push";
 import type { Prisma } from "@prisma/client";
-import { prisma } from "./prisma";
+import { prisma } from "./prisma.js";
 import {
   DASHBOARD_VISIBILITY_WINDOW_MS,
   QUEUE_NAMES,
   isUnitedStatesJobLocationOrTitle,
   jobMatchesWatchlist,
 } from "@jobradar/shared";
-import { createRedisConnection } from "./redis";
+import { createRedisConnection } from "./redis.js";
 
 type WatchlistWithUser = Prisma.WatchlistGetPayload<{
   include: {
@@ -20,7 +20,7 @@ type WatchlistWithUser = Prisma.WatchlistGetPayload<{
     };
   };
 }>;
-import type { Logger } from "pino";
+import type { FastifyBaseLogger } from "fastify";
 import type { NormalizedJob } from "@jobradar/shared";
 import { computeListingKey } from "@jobradar/ats-adapters";
 
@@ -54,7 +54,7 @@ if (process.env.VAPID_SUBJECT && process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && pro
   );
 }
 
-export async function startNotifier(logger: Logger) {
+export async function startNotifier(logger: FastifyBaseLogger) {
   const worker = new Worker<NewJobData>(
     QUEUE_NAMES.NEW_JOBS,
     async (bullJob) => {

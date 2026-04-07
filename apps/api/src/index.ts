@@ -21,7 +21,7 @@ config({ path: resolve(root, "docker/compose.override.env") });
 config({ path: resolve(root, ".env") });
 config({ path: resolve(root, ".env.local"), override: true });
 
-const PORT = parseInt(process.env.API_PORT || "3002", 10);
+const PORT = parseInt(process.env.PORT || process.env.API_PORT || "3002", 10);
 const prisma = new PrismaClient();
 const stripeSecret = process.env.STRIPE_SECRET_KEY;
 const stripe = stripeSecret

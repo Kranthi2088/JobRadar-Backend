@@ -1,6 +1,6 @@
 import type { NormalizedJob } from "@jobradar/shared";
-import { createAdapter } from "./factory";
-import { computeListingKey } from "./listing-key";
+import { createAdapter } from "./factory.js";
+import { computeListingKey } from "./listing-key.js";
 
 export type CompanySourceRow = {
   id: string;
