@@ -7,6 +7,8 @@ on:
     paths:
       - "apps/api/**"
       - "packages/**"
+      - "server.ts"
+      - "vercel.json"
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/backend-deploy-vercel.yml"

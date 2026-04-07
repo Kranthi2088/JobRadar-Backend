@@ -93,11 +93,24 @@ Existing workflows:
   - tests
   - build
 - **CD** (`.github/workflows/backend-deploy-vercel.yml`)
-  - Vercel deployment workflow
+  - Vercel deployment workflow (requires `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` in GitHub secrets)
 
-Note: Vercel is better suited for frontend/serverless patterns. For this backend design (especially the worker), Railway/Render/Fly are usually a better production fit.
+## 6) Deploy the API on Vercel (optional)
 
-## 6) Database migration step
+This repo includes a **root** [`server.ts`](./server.ts) entry and [`vercel.json`](./vercel.json) so Vercel can run the Fastify API as a [Fastify on Vercel](https://vercel.com/docs/frameworks/backend/fastify) project.
+
+1. In [Vercel](https://vercel.com/), **Add New Project** → import `JobRadar-Backend`.
+2. **Root Directory**: leave as **repository root** (where `package.json`, `server.ts`, and `vercel.json` live).
+3. Vercel should detect **Fastify**; build/install are set in `vercel.json` (`npm ci` + `npm run build:api`).
+4. Add the same env vars as the API on Railway (`DATABASE_URL`, `REDIS_URL`, `NEXTAUTH_*`, etc.).
+5. After deploy, set the frontend `BACKEND_API_URL` to your Vercel URL (e.g. `https://your-api.vercel.app`).
+
+**Important limitations**
+
+- **Worker** stays on Railway (or similar); do not run `apps/worker` on Vercel.
+- **SSE** (`GET /api/jobs/stream`) may hit [Vercel function duration limits](https://vercel.com/docs/functions/limitations); long-lived streams can disconnect. If that breaks live updates, keep the API that serves SSE on Railway or use a dedicated long-lived host.
+
+## 7) Database migration step
 
 Before first production traffic (and for each schema change), run:
 
@@ -107,7 +120,7 @@ npx prisma migrate deploy --schema=packages/db/prisma/schema.prisma
 
 Run in a trusted CI release job or one-time deploy command.
 
-## 7) Post-deploy smoke tests
+## 8) Post-deploy smoke tests
 
 After deployment:
 
