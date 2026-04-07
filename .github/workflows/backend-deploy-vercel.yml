@@ -33,6 +33,12 @@ jobs:
       - name: Install Vercel CLI
         run: npm i -g vercel@latest
 
+      - name: Validate Vercel secrets
+        run: |
+          test -n "${{ secrets.VERCEL_TOKEN }}" || (echo "Missing GitHub secret: VERCEL_TOKEN" && exit 1)
+          test -n "${{ secrets.VERCEL_ORG_ID }}" || (echo "Missing GitHub secret: VERCEL_ORG_ID" && exit 1)
+          test -n "${{ secrets.VERCEL_PROJECT_ID }}" || (echo "Missing GitHub secret: VERCEL_PROJECT_ID" && exit 1)
+
       - name: Pull Vercel project settings
         run: vercel pull --yes --environment=production --token="${{ secrets.VERCEL_TOKEN }}"
         env:
