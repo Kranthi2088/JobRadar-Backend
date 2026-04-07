@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "npm --prefix ../.. run build --workspace=@jobradar/shared && npm --prefix ../.. run build --workspace=@jobradar/ats-adapters && npm --prefix ../.. run build --workspace=@jobradar/db && tsc",
     "start": "node dist/index.js",
     "lint": "tsc --noEmit"
   },

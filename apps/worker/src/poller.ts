@@ -237,7 +237,7 @@ async function executePoll(
 
     const jobsWithKeys = jobs
       .filter(shouldPersistFetchedJob)
-      .map((j) => ({
+      .map((j: NormalizedJob) => ({
         ...j,
         listingKey: j.listingKey ?? computeListingKey(j.url),
       }));
