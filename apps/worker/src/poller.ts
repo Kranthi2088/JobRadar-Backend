@@ -28,6 +28,10 @@ const MAX_POLLS_PER_TICK = Math.max(
 );
 
 const DEFAULT_INTERVAL_SEC = 300;
+const POLL_STATE_TTL_SECONDS = Math.max(
+  60,
+  parseInt(process.env.REDIS_POLL_STATE_TTL_SECONDS || "21600", 10)
+);
 
 let lastSchedulerDbErrorLog = 0;
 let loggedEmptyWatchlists = false;
@@ -49,7 +53,12 @@ export async function startPoller(logger: FastifyBaseLogger) {
   void runSchedulerTick(logger);
 
   setInterval(async () => {
-    await redis.set("last-poll-at", new Date().toISOString());
+    await redis.set(
+      "last-poll-at",
+      new Date().toISOString(),
+      "EX",
+      POLL_STATE_TTL_SECONDS
+    );
   }, 30_000);
 }
 
@@ -262,7 +271,12 @@ async function executePoll(
         totalJobs: 0,
         latencyMs,
       });
-      await redis.set(POLL_LAST_KEY(company.slug), String(Date.now()));
+      await redis.set(
+        POLL_LAST_KEY(company.slug),
+        String(Date.now()),
+        "EX",
+        POLL_STATE_TTL_SECONDS
+      );
       await redis.del(POLL_FAIL_KEY(company.slug));
       return;
     }
@@ -299,13 +313,23 @@ async function executePoll(
       latencyMs,
     });
 
-    await redis.set(POLL_LAST_KEY(company.slug), String(Date.now()));
+    await redis.set(
+      POLL_LAST_KEY(company.slug),
+      String(Date.now()),
+      "EX",
+      POLL_STATE_TTL_SECONDS
+    );
     await redis.del(POLL_FAIL_KEY(company.slug));
   } catch (error: any) {
-    await redis.set(POLL_LAST_KEY(company.slug), String(Date.now()));
+    await redis.set(
+      POLL_LAST_KEY(company.slug),
+      String(Date.now()),
+      "EX",
+      POLL_STATE_TTL_SECONDS
+    );
 
     const fails = await redis.incr(POLL_FAIL_KEY(company.slug));
-    await redis.expire(POLL_FAIL_KEY(company.slug), 3600);
+    await redis.expire(POLL_FAIL_KEY(company.slug), POLL_STATE_TTL_SECONDS);
 
     if (fails >= CIRCUIT_BREAKER.FAILURE_THRESHOLD) {
       await openCircuitBreaker(company.slug);

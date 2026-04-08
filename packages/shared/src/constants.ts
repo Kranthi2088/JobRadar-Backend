@@ -11,7 +11,19 @@ export const QUEUE_NAMES = {
   EMAIL_DIGEST: "email-digest",
 } as const;
 
-export const SEEN_JOB_TTL_SECONDS = 90 * 24 * 60 * 60; // 90 days
+/**
+ * Keep Redis usage bounded on small plans.
+ * Default is 6 hours, override with REDIS_SEEN_JOB_TTL_SECONDS when needed.
+ */
+const DEFAULT_SEEN_JOB_TTL_SECONDS = 6 * 60 * 60;
+const parsedSeenTtl = Number.parseInt(
+  process.env.REDIS_SEEN_JOB_TTL_SECONDS ?? "",
+  10
+);
+export const SEEN_JOB_TTL_SECONDS =
+  Number.isFinite(parsedSeenTtl) && parsedSeenTtl > 0
+    ? parsedSeenTtl
+    : DEFAULT_SEEN_JOB_TTL_SECONDS;
 
 export const CIRCUIT_BREAKER = {
   FAILURE_THRESHOLD: 5,
